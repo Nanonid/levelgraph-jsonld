@@ -1,17 +1,17 @@
 LevelGraph-JSONLD
 ===========
 
-![Logo](https://github.com/mcollina/node-levelgraph/raw/master/logo.png)
+![Logo](https://github.com/levelgraph/levelgraph/raw/master/logo.png)
 
-[![Build Status](https://travis-ci.org/mcollina/levelgraph-jsonld.png)](https://travis-ci.org/mcollina/levelgraph-jsonld)
-[![Coverage Status](https://coveralls.io/repos/mcollina/levelgraph-jsonld/badge.png)](https://coveralls.io/r/mcollina/levelgraph-jsonld)
-[![Dependency Status](https://david-dm.org/mcollina/levelgraph-jsonld.png?theme=shields.io)](https://david-dm.org/mcollina/levelgraph-jsonld)
+[![Build Status](https://travis-ci.org/levelgraph/levelgraph-jsonld.png)](https://travis-ci.org/levelgraph/levelgraph-jsonld)
+[![Coverage Status](https://coveralls.io/repos/levelgraph/levelgraph-jsonld/badge.png)](https://coveralls.io/r/levelgraph/levelgraph-jsonld)
+[![Dependency Status](https://david-dm.org/levelgraph/levelgraph-jsonld.png?theme=shields.io)](https://david-dm.org/levelgraph/levelgraph-jsonld)
 [![Sauce Labs Tests](https://saucelabs.com/browser-matrix/levelgraph-jsonld.svg)](https://saucelabs.com/u/levelgraph-jsonld)
 
 __LevelGraph-JSONLD__ is a plugin for
-[LevelGraph](http://github.com/mcollina/levelgraph) that adds the
+[LevelGraph](http://github.com/levelgraph/levelgraph) that adds the
 ability to store, retrieve and delete JSON-LD objects.
-In fact, it is a full-bown Object-Document-Mapper (ODM) for
+In fact, it is a full-blown Object-Document-Mapper (ODM) for
 __LevelGraph__.
 
 ## Install
@@ -24,11 +24,11 @@ $ npm install level levelgraph levelgraph-jsonld --save
 ```
 Then in your code:
 ```javascript
-var levelup = require("levelup"),
-    yourDB = levelup("./yourdb"),
+var level      = require('level'),
+    yourDB     = level('./yourdb'),
     levelgraph = require('levelgraph'),
-    levelgraphJSONLD = require('levelgraph-jsonld'),
-    db = levelgraphJSONLD(levelgraph(yourDB));
+    jsonld     = require('levelgraph-jsonld'),
+    db         = jsonld(levelgraph(yourDB));
 ```
 
 At the moment it requires node v0.10.x, but the port to node v0.8.x
@@ -39,7 +39,7 @@ If you need it, just open a pull request.
 
 If you use [browserify](http://browserify.org/) you can use this package
 in a browser just as in node.js. Please also take a look at [Browserify
-section in LevelGraph package](https://github.com/mcollina/levelgraph#browserify)
+section in LevelGraph package](https://github.com/levelgraph/levelgraph#browserify)
 
 You can also use standalone browserified version from `./build`
 directory or use [bower](http://bower.io)
@@ -62,10 +62,25 @@ It will also install its dependency levelgraph! Now you can simply:
 We assume in following examples that you created database as explained
 above!
 ```js
-var levelup = require("levelup"),
-    yourDB = levelup("./yourdb"),
-    db = levelgraphJSONLD(levelgraph(yourDB));
+var level  = require('level'),
+    yourDB = level('./yourdb'),
+    db     = levelgraphJSONLD(levelgraph(yourDB));
 ```
+
+`'base'` can also be specified when you create the db:
+```javascript
+var level      = require('level'),
+    yourDB     = level('./yourdb'),
+    levelgraph = require('levelgraph'),
+    jsonld     = require('levelgraph-jsonld'),
+    opts       = { base: 'http://matteocollina.com/base' },
+    db         = jsonld(levelgraph(yourDB), opts);
+```
+
+> From v1, overwriting and deleting is more conservative. If you rely on the previous behavior you can set the `overwrite` option to `true` (when creating the db or as options to `put` and `del`) to:
+>  - overwrite all existing triples when using `put`
+>  - delete all blank nodes recursively when using `del` (cf upcoming `cut` function)
+> This old api will be phased out.
 
 ### Put
 
@@ -105,15 +120,7 @@ db.jsonld.put(manu, { base: 'http://this/is/an/iri' }, function(err, obj) {
 });
 ```
 
-`'base'` can also be specified when you create the db:
-```javascript
-var levelup    = require("levelup"),
-    yourDB     = levelup("./yourdb"),
-    levelgraph = require('levelgraph'),
-    jsonld     = require('levelgraph-jsonld'),
-    opts       = { base: 'http://matteocollina.com/base' },
-    db         = jsonld(levelgraph(yourDB), opts);
-```
+`'base'` can also be [specified when you create the db](#usage).
 
 __LevelGraph-JSONLD__ also support nested objects, like so:
 ```javascript
@@ -166,7 +173,7 @@ var nested = {
 };
 
 db.jsonld.put(nested, function(err, obj) {
-  // obj will be 
+  // obj will be
   // {
   //   "@context": {
   //     "name": "http://xmlns.com/foaf/0.1/name",
@@ -187,11 +194,33 @@ db.jsonld.put(nested, function(err, obj) {
 
 ### Delete
 
-In order to delete an object, you can just pass it's `'@id'` to the
-`'@del'` method:
+In order to delete an object, you need to pass the document to the `'del'` method which will delete only the properties specified in the document:
 ```javascript
-db.jsonld.del(manu['@id'], function(err) {
+db.jsonld.del(manu, function(err) {
   // do something after it is deleted!
+});
+```
+
+Note that blank nodes are ignored, so to delete blank nodes you need to pass the `cut: true` option (you can also add the `recurse: true`option) or use the `'cut'` method below.
+
+> Note that since v1 `'del'` doesn't support passing an IRI anymore.
+
+### Cut
+
+In order to delete the blank nodes object, you can just pass it's `'@id'` to the
+`'cut'` method:
+```javascript
+db.jsonld.cut(manu['@id'], function(err) {
+  // do something after it is cut!
+});
+```
+
+You can also pass an object, but in this case the properties are not used to determine which triples will be deleted and only the `@id`s are considered.
+
+Using the `recurse` option you can follow all links and blank nodes (which might result in deleting more data than you expect)
+```javascript
+db.jsonld.cut(manu['@id'], { recurse: true }, function(err) {
+  // do something after it is cut!
 });
 ```
 
@@ -260,7 +289,7 @@ db.jsonld.put(manu, function(){
 ```
 ## Changes
 
-[CHANGELOG.md](https://github.com/mcollina/levelgraph-jsonld/blob/master/CHANGELOG.md)
+[CHANGELOG.md](https://github.com/levelgraph/levelgraph-jsonld/blob/master/CHANGELOG.md)
 **including migration info for breaking changes**
 
 
@@ -282,7 +311,7 @@ db.jsonld.put(manu, function(){
 
 ## LICENSE - "MIT License"
 
-Copyright (c) 2013 Matteo Collina (http://matteocollina.com)
+Copyright (c) 2013-2017 Matteo Collina and LevelGraph-JSONLD contributors
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
